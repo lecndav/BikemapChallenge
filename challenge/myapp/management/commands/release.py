@@ -41,7 +41,7 @@ def loadState():
 
 
 def fetchAll():
-    os.system('git fetch origin')
+    subprocess.run(['git', 'fetch', 'origin'], stdout=subprocess.PIPE)
 
 
 def getRemoteBranches():
@@ -55,13 +55,19 @@ def getRemoteBranches():
 
 
 def mergeBranch(branch):
-    # TODO: merge branch into test
-    return True
+    result = subprocess.run(['git', 'merge', branch, '--no-edit'],
+                   stdout=subprocess.PIPE)
+
+    if result.returncode != 0:
+        subprocess.run(['git', 'merge', '--abort'], stdout=subprocess.PIPE)
+        return False
 
 
 def createBranch(name):
-    os.system('git checkout develop')
-    os.system('git checkout -b %s' % name)
+    subprocess.run(['git', 'checkout', 'develop'], stdout=subprocess.PIPE)
+    subprocess.run(['git', 'checkout', '-b', name], stdout=subprocess.PIPE)
+    subprocess.run(['git', 'push', '--set-upstream', 'origin', name],
+                   stdout=subprocess.PIPE)
     return True
 
 
@@ -73,7 +79,14 @@ def makeMessages():
 def mergeBranchesIntoRelease(branches):
     for b in branches:
         if b.state == BranchState.APPROVED:
-            mergeBranch(b.name)
+            if not mergeBranch(b.name):
+                return False
+
+def pushBranch():
+    subprocess.run(['git', 'push'], stdout=subprocess.PIPE)
+
+def checkoutBranch(name):
+    subprocess.run(['git', 'checkout', name], stdout=subprocess.PIPE)
 
 
 class Command(BaseCommand):
@@ -114,6 +127,7 @@ class Command(BaseCommand):
         bNames = getRemoteBranches()
 
         if options['add']:
+            checkoutBranch(testB)
             for b in options['add']:
                 if b not in bNames:
                     self.stdout.write("Could not find remote to %s! Skipping" %
@@ -140,8 +154,9 @@ class Command(BaseCommand):
                     state['branchNames'].append(b)
                 else:
                     raise CommandError(
-                        'Could merge branch %s, resolve conflict' % b)
+                        'Could not merge branch %s, resolve conflict' % b)
 
+                pushBranch()
                 # saveState(state)
 
         if options['approve']:
@@ -170,5 +185,6 @@ class Command(BaseCommand):
             # checkout test branch
             makeMessages()
             createBranch(releaseB)
-            mergeBranchesIntoRelease(state['branches'])
-            # push branch
+            if not mergeBranchesIntoRelease(state['branches']):
+                raise CommandError('Could merge branches into release!')
+            pushBranch()
