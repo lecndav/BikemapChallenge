@@ -60,7 +60,7 @@ def mergeBranch(branch):
 
 
 def createBranch(name):
-    os.system('git checkout development')
+    os.system('git checkout develop')
     os.system('git checkout -b %s' % name)
     return True
 
