@@ -12,6 +12,7 @@ class BranchState(Enum):
     APPROVED = 2
     CONFLICTING = 3
     NOT_TRACKABLE = 4
+    INIT = 5
 
 
 class Branch():
@@ -21,10 +22,7 @@ class Branch():
 
     def __init__(self, name):
         self.name = name
-        nameParts = self.name.split('/')
-        if len(nameParts) > 1:
-            if nameParts[0] in ALLOWED_BRANCH_NAMES:
-                self.state = BranchState.TO_BE_TESTED
+        self.state = BranchState.INIT
 
 
 def saveState(state):
@@ -32,7 +30,7 @@ def saveState(state):
 
 
 def loadState():
-    # load state from pickle file
+    # state: version, branches, branchnames
     stateFile = Path(STATE_FILE_NAME)
     if stateFile.is_file():
         return pickle.load(open(STATE_FILE_NAME, "rb"))
@@ -40,8 +38,15 @@ def loadState():
         return {}
 
 
+def fetchAll():
+    # TODO: fetch all from remote
+    pass
+
+
 def getRemoteBranches():
     # from oririn
+    fetchAll()
+    # TODO: get branch names from origin
 
     # workaround
     branches = [
@@ -51,46 +56,120 @@ def getRemoteBranches():
     return branches
 
 
+def mergeBranch(branch):
+    # TODO: merge branch into test
+    return True
+
+
+def createBranch(name):
+    # TODO: create test branch with name
+    return True
+
+
+def makeMessages():
+    # TODO: makemessages
+    return True
+
+
+def mergeBranchesIntoRelease(branches):
+    for b in branches:
+        if b.state == BranchState.APPROVED:
+            mergeBranch(b.name)
+
+
 class Command(BaseCommand):
     help = 'Release Software'
 
     def add_arguments(self, parser):
-        # start workflow with branch names
-        parser.add_argument('--start', nargs='+', type=str)
+        # release branch
+        parser.add_argument('release', type=str)
+
+        # add branches to release
+        parser.add_argument('--add', nargs='+', type=str)
 
         # approve feature branch
-        parser.add_argument('--approved', type=str)
+        parser.add_argument('--approve', type=str)
 
         # to be tested branch
         parser.add_argument('--tbt', type=str)
 
         # create release branch
-        parser.add_argument('--release', type=bool)
+        parser.add_argument('--finish', action='store_true')
 
     def handle(self, *args, **options):
-        state = {}
-        if options['start']:
-            state = loadState()
-            if bool(state):
-                raise CommandError(
-                    'Release already with version %s already started!' %
-                    state['version'])
+        state = loadState()
+        # TODO: add checks
+        releaseB = options['release']
+        version = releaseB.split('/')[1]
+        testB = 'test/%s' % version
 
-            bNames = getRemoteBranches()
-            branches = []
-            for b in options['start']:
+        if not bool(state):
+            # new workflow
+            state['version'] = version
+            state['branches'] = []
+            state['branchNames'] = []
+            if not createBranch(testB):
+                raise CommandError('Could not create test branch')
+            self.stdout.write("Created test branch %s" % testB)
+
+        bNames = getRemoteBranches()
+
+        if options['add']:
+            for b in options['add']:
                 if b not in bNames:
                     self.stdout.write("Could not find remote to %s! Skipping" %
                                       b)
                     continue
-                branch = Branch(b)
-                if branch.state == BranchState.TO_BE_TESTED:
-                    branches.append(branch)
+
+                if b in state['branchNames']:
+                    self.stdout.write("Branch %s already included! Skipping" %
+                                      b)
+                    continue
+
+                # check branch name format
+                nameParts = b.split('/')
+                if len(nameParts) > 1:
+                    if nameParts[0] not in ALLOWED_BRANCH_NAMES:
+                        self.stdout.write("Skipping %s" % b)
                 else:
                     self.stdout.write("Skipping %s" % b)
 
-            if len(branches) == 0:
-                self.stdout.write("Nothing to do!")
-                exit(0)
+                branch = Branch(b)
+                if mergeBranch(b):
+                    # TODO: check migration
+                    state['branches'].append(branch)
+                    state['branchNames'].append(b)
+                else:
+                    raise CommandError(
+                        'Could merge branch %s, resolve conflict' % b)
 
-            
+                # saveState(state)
+
+        if options['approve']:
+            branch = options['approve']
+            c = False
+            for b in state['branches']:
+                if branch == b.name:
+                    b.state = BranchState.APPROVED
+                    c = True
+                    break
+            if c:
+                self.stdout.write("Approved %s" % branch)
+
+        if options['tbt']:
+            branch = options['tbt']
+            c = False
+            for b in state['branches']:
+                if branch == b.name:
+                    b.state = BranchState.TO_BE_TESTED
+                    c = True
+                    break
+            if c:
+                self.stdout.write("Set branch %s to be tested" % branch)
+
+        if options['finish']:
+            # checkout test branch
+            makeMessages()
+            createBranch(releaseB)
+            mergeBranchesIntoRelease(state['branches'])
+            # push branch
