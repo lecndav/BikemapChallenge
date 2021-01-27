@@ -1,7 +1,9 @@
+import os
+import subprocess
+import pickle
 from enum import Enum
 from pathlib import Path
 from django.core.management.base import BaseCommand, CommandError
-import pickle
 
 STATE_FILE_NAME = 'state.p'
 ALLOWED_BRANCH_NAMES = ['feature', 'bug']
@@ -39,21 +41,17 @@ def loadState():
 
 
 def fetchAll():
-    # TODO: fetch all from remote
-    pass
+    os.system('git fetch origin')
 
 
 def getRemoteBranches():
-    # from oririn
     fetchAll()
-    # TODO: get branch names from origin
+    result = subprocess.run(['git', 'branch', '-r'], stdout=subprocess.PIPE)
+    out = result.stdout.decode('utf-8')
+    rows = out.split('\n')
+    branches = map(lambda x: '/'.join(x.strip().split('/')[1:]), rows)
 
-    # workaround
-    branches = [
-        'main', 'release/1.1.1', 'feature/added-sum', 'feature/added-sub',
-        'feature/added-multiplay', 'bug/added-diff', 'some/thing'
-    ]
-    return branches
+    return list(branches)
 
 
 def mergeBranch(branch):
@@ -62,7 +60,8 @@ def mergeBranch(branch):
 
 
 def createBranch(name):
-    # TODO: create test branch with name
+    os.system('git checkout development')
+    os.system('git checkout -b %s' % name)
     return True
 
 
