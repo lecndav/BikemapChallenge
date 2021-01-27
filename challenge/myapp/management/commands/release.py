@@ -82,6 +82,8 @@ def mergeBranchesIntoRelease(branches):
             if not mergeBranch(b.name):
                 return False
 
+    return True
+
 def pushBranch():
     subprocess.run(['git', 'push'], stdout=subprocess.PIPE)
 
@@ -126,6 +128,9 @@ class Command(BaseCommand):
 
         bNames = getRemoteBranches()
 
+        if version != state.version:
+            raise CommandError('Relase process with version %s already started!' % version)
+
         if options['add']:
             checkoutBranch(testB)
             for b in options['add']:
@@ -157,7 +162,7 @@ class Command(BaseCommand):
                         'Could not merge branch %s, resolve conflict' % b)
 
                 pushBranch()
-                # saveState(state)
+                saveState(state)
 
         if options['approve']:
             branch = options['approve']
@@ -182,9 +187,9 @@ class Command(BaseCommand):
                 self.stdout.write("Set branch %s to be tested" % branch)
 
         if options['finish']:
-            # checkout test branch
             makeMessages()
             createBranch(releaseB)
             if not mergeBranchesIntoRelease(state['branches']):
                 raise CommandError('Could merge branches into release!')
             pushBranch()
+            saveState({})
