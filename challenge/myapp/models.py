@@ -1,3 +1,7 @@
 from django.db import models
 
-# Create your models here.
+
+class Person(models.Model):
+    fistname = models.TextField(default='')
+    lastname = models.TextField(default='')
+
